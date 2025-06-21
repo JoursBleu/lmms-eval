@@ -3,7 +3,11 @@ from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
 import decord
+import io
 import numpy as np
+import os
+from pathlib import Path
+import time
 import torch
 from accelerate import Accelerator, DistributedType
 from loguru import logger as eval_logger
@@ -82,7 +86,7 @@ class Qwen2_5_VL(lmms):
             ).eval()
         else:
             self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(pretrained, torch_dtype="auto", device_map=self.device_map).eval()
-        self.processor = AutoProcessor.from_pretrained(pretrained, max_pixels=max_pixels, min_pixels=min_pixels)
+        self._model = torch.compile(self._model)
         self.max_pixels = max_pixels
         self.min_pixels = min_pixels
         self.max_num_frames = max_num_frames
@@ -218,6 +222,36 @@ class Qwen2_5_VL(lmms):
             #     if "<image>" in contexts[i]:
             #         contexts[i] = contexts[i].replace("<image>", "")
 
+            if "max_new_tokens" not in gen_kwargs:
+                gen_kwargs["max_new_tokens"] = 4096
+            if "temperature" not in gen_kwargs:
+                gen_kwargs["temperature"] = 0
+            if "top_p" not in gen_kwargs:
+                gen_kwargs["top_p"] = None
+            if "num_beams" not in gen_kwargs:
+                gen_kwargs["num_beams"] = 1
+
+            # Generate and cache response
+            cache_path = None
+            if "CACHE_DIR" in os.environ:
+                assert(self.batch_size == 1)
+                path = Path(os.environ["CACHE_DIR"])
+                path.mkdir(parents=True, exist_ok=True)
+                cache_path = os.path.join(os.environ["CACHE_DIR"], f"{task}_{split}_{doc_id[0]}.txt")
+
+            print("cache_path", cache_path, flush=True)
+            if cache_path is not None and os.path.exists(cache_path):
+                fd = open(cache_path, 'r')
+                ans = fd.read()
+                fd.close()
+                res.append(ans)
+                self.cache_hook.add_partial("generate_until", (contexts[0], gen_kwargs), ans)
+                pbar.update(1)
+                print("Cached Prompt:", contexts[0], flush=True)
+                print("Cached Response:", ans, flush=True)
+                continue
+
+
             messages = []
             processed_visuals = []
             for i, context in enumerate(contexts):
@@ -235,11 +269,12 @@ class Qwen2_5_VL(lmms):
                             image_contents = list(map(lambda x: f"data:image/jpeg;base64,{x}", visual))
                             message.append({"role": "user", "content": [{"type": "video", "video": image_contents}, {"type": "text", "text": context}]})
                         else:
-                            vr = decord.VideoReader(visual)
-                            first_frame = vr[0].asnumpy()
-                            height, width = first_frame.shape[:2]
+                            # vr = decord.VideoReader(visual)
+                            # first_frame = vr[0].asnumpy()
+                            # height, width = first_frame.shape[:2]
                             # max_pixels = height * width
-                            message.append({"role": "user", "content": [{"type": "video", "video": visual, "max_pixels": 360 * 420}, {"type": "text", "text": context}]})
+                            # message.append({"role": "user", "content": [{"type": "video", "video": visual, "max_pixels": self.max_pixels}, {"type": "text", "text": context}]})
+                            message.append({"role": "user", "content": [{"type": "text", "text": context}, {"type": "video", "video": visual, "max_pixels": 360 * 420}, ]})
                     elif isinstance(visual, Image.Image):  # Single image
                         base64_image = visual.convert("RGB")
                         buffer = BytesIO()
@@ -281,17 +316,10 @@ class Qwen2_5_VL(lmms):
             else:
                 inputs = inputs.to(self.device)
 
-            if "max_new_tokens" not in gen_kwargs:
-                gen_kwargs["max_new_tokens"] = 4096
-            if "temperature" not in gen_kwargs:
-                gen_kwargs["temperature"] = 0
-            if "top_p" not in gen_kwargs:
-                gen_kwargs["top_p"] = None
-            if "num_beams" not in gen_kwargs:
-                gen_kwargs["num_beams"] = 1
-
             pad_token_id = self.tokenizer.pad_token_id
 
+            torch.cuda.synchronize()
+            start = time.time()
             cont = self.model.generate(
                 **inputs,
                 eos_token_id=self.tokenizer.eos_token_id,
@@ -300,9 +328,23 @@ class Qwen2_5_VL(lmms):
                 temperature=gen_kwargs["temperature"],
                 top_p=gen_kwargs["top_p"],
                 num_beams=gen_kwargs["num_beams"],
-                max_new_tokens=4096,
+                max_new_tokens=1,
                 use_cache=self.use_cache,
+                # return_dict_in_generate=True,
+                # output_attentions=True,
             )
+            torch.cuda.synchronize()
+            end = time.time()
+            infer_time = (end - start) * 1000
+
+            # attention_finals = []
+            # for layer in range(28):
+                # attention_finals.append(cont['attentions'][0][layer][:,:,-1,:])
+            # attention_finals = torch.concat(attention_finals, dim=0)
+
+            # torch.save(cont['sequences'], 'sequences.pt')
+            # torch.save(cont['attentions'], 'attentions.pt')
+            # breakpoint()
 
             generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, cont)]
             answers = self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
@@ -313,6 +355,14 @@ class Qwen2_5_VL(lmms):
                 res.append(ans)
                 self.cache_hook.add_partial("generate_until", (context, gen_kwargs), ans)
                 pbar.update(1)
+                if cache_path is not None:
+                    fd = open(cache_path, 'w')
+                    fd.write(f'time: {infer_time}\n')
+                    fd.write(ans)
+                    fd.close()
+                print("Prompt:", context, flush=True)
+                print("Response:", ans, flush=True)
+                print("time:", infer_time, flush=True)
             # reorder this group of results back to original unsorted form
         res = re_ords.get_original(res)
 

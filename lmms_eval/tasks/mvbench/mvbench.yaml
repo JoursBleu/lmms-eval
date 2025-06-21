@@ -3,13 +3,13 @@ task:
   - mvbench_action_sequence
   - mvbench_moving_count
   - mvbench_action_prediction
-  - mvbench_episodic_reasoning
+  # - mvbench_episodic_reasoning
   - mvbench_action_antonym
   - mvbench_action_count
   - mvbench_scene_transition
   - mvbench_object_shuffle
   - mvbench_object_existence
-  - mvbench_fine_grained_pose
+  # - mvbench_fine_grained_pose
   - mvbench_unexpected_action
   - mvbench_moving_direction
   - mvbench_state_change

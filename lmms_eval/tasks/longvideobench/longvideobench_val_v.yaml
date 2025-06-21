@@ -1,4 +1,4 @@
-dataset_path: longvideobench/LongVideoBench
+dataset_path: /lpai/volumes/lpai-yharnam-vol-ga/lt/data/LongVideoBench
 dataset_kwargs:
   token: True
   cache_dir: longvideobench

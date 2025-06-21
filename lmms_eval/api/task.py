@@ -932,7 +932,7 @@ class ConfigurableTask(Task):
                 return
 
             if "video" in dataset_kwargs and dataset_kwargs["video"]:
-                hf_home = os.getenv("HF_HOME", "~/.cache/huggingface/")
+                hf_home = os.getenv("HF_HOME", "/lpai/volumes/lpai-yharnam-vol-ga/lt/data/")
                 hf_home = os.path.expanduser(hf_home)
                 cache_dir = dataset_kwargs["cache_dir"]
                 cache_dir = os.path.join(hf_home, cache_dir)
@@ -942,7 +942,8 @@ class ConfigurableTask(Task):
                     force_unzip = dataset_kwargs.get("force_unzip", False)
                     revision = dataset_kwargs.get("revision", "main")
                     create_link = dataset_kwargs.get("create_link", False)
-                    cache_path = snapshot_download(repo_id=self.DATASET_PATH, revision=revision, repo_type="dataset", force_download=force_download, etag_timeout=60)
+                    # cache_path = snapshot_download(repo_id=self.DATASET_PATH, revision=revision, repo_type="dataset", force_download=force_download, etag_timeout=60)
+                    cache_path = '/lpai/volumes/lpai-yharnam-vol-ga/lt/data/LongVideoBench/videos'
                     zip_files = glob(os.path.join(cache_path, "**/*.zip"), recursive=True)
                     tar_files = glob(os.path.join(cache_path, "**/*.tar*"), recursive=True)
 

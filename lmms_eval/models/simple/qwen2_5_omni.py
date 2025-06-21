@@ -8,6 +8,11 @@ import decord
 import librosa
 import numpy as np
 import soundfile as sf
+import io
+import numpy as np
+import os
+from pathlib import Path
+import time
 import torch
 from accelerate import Accelerator, DistributedType
 from loguru import logger as eval_logger
@@ -77,9 +82,24 @@ class Qwen2_5_Omni(lmms):
             self._device = torch.device(f"cuda:{accelerator.local_process_index}")
             self.device_map = f"cuda:{accelerator.local_process_index}"
 
+<<<<<<< HEAD:lmms_eval/models/simple/qwen2_5_omni.py
         Qwen2_5OmniForConditionalGeneration._tp_plan = [] if Qwen2_5OmniForConditionalGeneration._tp_plan is None else Qwen2_5OmniForConditionalGeneration._tp_plan
         self._model = Qwen2_5OmniForConditionalGeneration.from_pretrained(pretrained, torch_dtype="auto", device_map=self.device_map, attn_implementation=attn_implementation).eval()
         self.processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+=======
+        if use_flash_attention_2:
+            self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                pretrained,
+                torch_dtype=torch.bfloat16,
+                device_map=self.device_map,
+                attn_implementation="flash_attention_2",
+            ).eval()
+        else:
+            self._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(pretrained, torch_dtype="auto", device_map=self.device_map).eval()
+        self._model = torch.compile(self._model)
+        self.max_pixels = max_pixels
+        self.min_pixels = min_pixels
+>>>>>>> 28dcd13 (test partical):lmms_eval/models/qwen2_5_vl.py
         self.max_num_frames = max_num_frames
         self._tokenizer = self.processor.tokenizer
 
@@ -270,15 +290,6 @@ class Qwen2_5_Omni(lmms):
             else:
                 inputs = inputs.to(self.model.device).to(self.model.dtype)
 
-            if "max_new_tokens" not in gen_kwargs:
-                gen_kwargs["max_new_tokens"] = 4096
-            if "temperature" not in gen_kwargs:
-                gen_kwargs["temperature"] = 0
-            if "top_p" not in gen_kwargs:
-                gen_kwargs["top_p"] = None
-            if "num_beams" not in gen_kwargs:
-                gen_kwargs["num_beams"] = 1
-
             pad_token_id = self.tokenizer.pad_token_id
 
             try:
@@ -314,6 +325,7 @@ class Qwen2_5_Omni(lmms):
                 content.append(ans)
                 self.cache_hook.add_partial("generate_until", (context, gen_kwargs), ans)
                 pbar.update(1)
+
 
         res = re_ords.get_original(res)
         pbar.close()

@@ -8,9 +8,13 @@ from datetime import timedelta
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import os
+from pathlib import Path
 import PIL
+import time
 import torch
 import transformers
+from transformers import SinkCache
 from accelerate import Accelerator, DistributedType, InitProcessGroupKwargs
 from accelerate.state import AcceleratorState
 from decord import VideoReader, cpu
@@ -419,6 +423,37 @@ class Llava_OneVision(lmms):
             if "until" in gen_kwargs:
                 gen_kwargs.pop("until")
 
+            # preconfigure gen_kwargs with defaults
+            if "max_new_tokens" not in gen_kwargs:
+                gen_kwargs["max_new_tokens"] = 1024
+            if "temperature" not in gen_kwargs:
+                gen_kwargs["temperature"] = 0
+            if "do_sample" not in gen_kwargs:
+                gen_kwargs["do_sample"] = False
+            if "top_p" not in gen_kwargs:
+                gen_kwargs["top_p"] = None
+            if "num_beams" not in gen_kwargs:
+                gen_kwargs["num_beams"] = 1
+
+            # Generate and cache response
+            cache_path = None
+            if "CACHE_DIR" in os.environ:
+                assert(self.batch_size == 1)
+                path = Path(os.environ["CACHE_DIR"])
+                path.mkdir(parents=True, exist_ok=True)
+                cache_path = os.path.join(os.environ["CACHE_DIR"], f"{task}_{split}_{batched_doc_id[0]}.txt")
+
+            if cache_path is not None and os.path.exists(cache_path):
+                fd = open(cache_path, 'r')
+                ans = fd.read()
+                fd.close()
+                res.append(ans)
+                self.cache_hook.add_partial("generate_until", (batched_contexts[0], gen_kwargs), ans)
+                pbar.update(1)
+                print("Cached Prompt:", batched_contexts[0], flush=True)
+                print("Cached Response:", ans, flush=True)
+                continue
+
             question_input = []
             # import ipdb; ipdb.set_trace()
             for visual, context in zip(batched_visuals, batched_contexts):
@@ -540,6 +575,8 @@ class Llava_OneVision(lmms):
             if "max_new_tokens" not in gen_kwargs:
                 gen_kwargs["max_new_tokens"] = 1024
 
+            torch.cuda.synchronize()
+            start = time.time()
             if "image_aspect_ratio" in gen_kwargs.keys():
                 gen_kwargs.pop("image_aspect_ratio")
             # When do_sample=False, remove sampling-related parameters to avoid warnings
@@ -556,11 +593,22 @@ class Llava_OneVision(lmms):
                 text_outputs = self.tokenizer.batch_decode(cont, skip_special_tokens=True)
             except Exception as e:
                 raise e
+            torch.cuda.synchronize()
+            end = time.time()
+            infer_time = (end - start) * 1000
 
             text_outputs = [response.strip() for response in text_outputs]
             res.extend(text_outputs)
             self.cache_hook.add_partial("generate_until", (context, gen_kwargs), text_outputs)
             pbar.update(1)
+            if cache_path is not None:
+                fd = open(cache_path, 'w')
+                fd.write(f'time: {infer_time}\n')
+                fd.write(text_outputs[0])
+                fd.close()
+            print("Prompt:", context, flush=True)
+            print("Response:", text_outputs, flush=True)
+            print("lmms time:", infer_time, flush=True)
             # reorder this group of results back to original unsorted form
         res = re_ords.get_original(res)
 

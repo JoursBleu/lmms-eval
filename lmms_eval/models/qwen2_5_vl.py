@@ -273,8 +273,8 @@ class Qwen2_5_VL(lmms):
                             # first_frame = vr[0].asnumpy()
                             # height, width = first_frame.shape[:2]
                             # max_pixels = height * width
-                            # message.append({"role": "user", "content": [{"type": "video", "video": visual, "max_pixels": self.max_pixels}, {"type": "text", "text": context}]})
-                            message.append({"role": "user", "content": [{"type": "text", "text": context}, {"type": "video", "video": visual, "max_pixels": 360 * 420}, ]})
+                            message.append({"role": "user", "content": [{"type": "video", "video": visual, "max_pixels": self.max_pixels}, {"type": "text", "text": context}]})
+                            # message.append({"role": "user", "content": [{"type": "text", "text": context}, {"type": "video", "video": visual, "max_pixels": 360 * 420}, ]})
                     elif isinstance(visual, Image.Image):  # Single image
                         base64_image = visual.convert("RGB")
                         buffer = BytesIO()

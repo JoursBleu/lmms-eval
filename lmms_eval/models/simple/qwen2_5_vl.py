@@ -5,6 +5,10 @@ from typing import List, Optional, Tuple, Union
 
 import decord
 import numpy as np
+import io
+import os
+from pathlib import Path
+import time
 import torch
 from accelerate import Accelerator, DistributedType
 from loguru import logger as eval_logger
@@ -20,6 +24,7 @@ from lmms_eval import utils
 from lmms_eval.api.instance import Instance
 from lmms_eval.api.model import lmms
 from lmms_eval.api.registry import register_model
+from lmms_eval.models.model_utils.load_video import read_video_pyav_base64
 from lmms_eval.models.model_utils.reasoning_model_utils import (
     parse_reasoning_model_answer,
 )
@@ -224,6 +229,36 @@ class Qwen2_5_VL(lmms):
                 if "<image>" in contexts[i]:
                     contexts[i] = contexts[i].replace("<image>", "")
 
+            # Generate and cache response
+            cache_path = None
+            if "CACHE_DIR" in os.environ:
+                assert(self.batch_size == 1)
+                path = Path(os.environ["CACHE_DIR"])
+                path.mkdir(parents=True, exist_ok=True)
+                cache_path = os.path.join(os.environ["CACHE_DIR"], f"{task}_{split}_{doc_id[0]}.txt")
+
+            # Set default generation kwargs
+            default_gen_kwargs = {
+                "max_new_tokens": 32768,
+                "temperature": 0.0,  # Set to 0 for greedy default
+                "top_p": None,
+                "num_beams": 1,
+            }
+            # Update with provided kwargs
+            current_gen_kwargs = {**default_gen_kwargs, **gen_kwargs}
+
+            print("cache_path", cache_path, flush=True)
+            if cache_path is not None and os.path.exists(cache_path):
+                fd = open(cache_path, 'r')
+                ans = fd.read()
+                fd.close()
+                res.append(ans)
+                self.cache_hook.add_partial("generate_until", (contexts[0], current_gen_kwargs), ans)
+                pbar.update(1)
+                print("Cached Prompt:", contexts[0], flush=True)
+                print("Cached Response:", ans, flush=True)
+                continue
+
             batched_messages = []
             for i, context in enumerate(contexts):
                 if "<image>" in context:
@@ -301,15 +336,6 @@ class Qwen2_5_VL(lmms):
             else:
                 inputs = inputs.to(self.device)
 
-            # Set default generation kwargs
-            default_gen_kwargs = {
-                "max_new_tokens": 32768,
-                "temperature": 0.0,  # Set to 0 for greedy default
-                "top_p": None,
-                "num_beams": 1,
-            }
-            # Update with provided kwargs
-            current_gen_kwargs = {**default_gen_kwargs, **gen_kwargs}
             pad_token_id = self.tokenizer.pad_token_id
 
             if current_gen_kwargs["temperature"] > 0:
@@ -319,6 +345,8 @@ class Qwen2_5_VL(lmms):
                 current_gen_kwargs["temperature"] = None
                 current_gen_kwargs["top_p"] = None
 
+            torch.cuda.synchronize()
+            start = time.time()
             cont = self.model.generate(
                 **inputs,
                 eos_token_id=self.tokenizer.eos_token_id,
@@ -330,6 +358,9 @@ class Qwen2_5_VL(lmms):
                 max_new_tokens=current_gen_kwargs["max_new_tokens"],
                 use_cache=self.use_cache,
             )
+            torch.cuda.synchronize()
+            end = time.time()
+            infer_time = (end - start) * 1000
 
             generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, cont)]
             answers = self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
@@ -344,6 +375,11 @@ class Qwen2_5_VL(lmms):
                 res.append(clean_ans)
                 self.cache_hook.add_partial("generate_until", (context, gen_kwargs), clean_ans)
                 pbar.update(1)
+                if cache_path is not None:
+                    fd = open(cache_path, 'w')
+                    fd.write(f'time: {infer_time}\n')
+                    fd.write(clean_ans)
+                    fd.close()
 
                 # eval_logger.debug(f"Question: {context}")
                 # eval_logger.debug(f"Model Raw Response: {ans}")

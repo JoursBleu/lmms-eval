@@ -20,7 +20,13 @@ export SINK_SIZE=128
 export USE_POS=1
 
 # export MAX_NUM_FRAMES=32
-export VIDEO_MAX_PIXELS=10000
+# export VIDEO_MAX_PIXELS=151200
+
+# export VIDEO_MAX_PIXELS=602112 # (768 * 28 * 28)
+# export VIDEO_MAX_PIXELS=1003520 # (1280 * 28 * 28)
+# export VIDEO_MAX_PIXELS=1693440 # (2160 * 28 * 28)
+# export VIDEO_MAX_PIXELS=3386880 # (4320 * 28 * 28)
+export VIDEO_MAX_PIXELS=90316800 # (128000 * 28 * 28 * 0.9)
 
 export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'
 
@@ -43,7 +49,7 @@ export CACHE_DIR=$OUTPUT_DIR/cache_${USE_PAVLM}_${BLOCK_SIZE}_${SINK_SIZE}_${USE
 torchrun --master_port=25678 --nproc_per_node=$NPROC_PER_NODE \
 	-m lmms_eval \
 	--model qwen2_5_vl \
-	--model_args pretrained=${MODEL_PATH},max_pixels=${VIDEO_MAX_PIXELS},use_flash_attention_2=True,max_num_frames=32 \
+	--model_args pretrained=${MODEL_PATH},attn_implementation=flash_attention_2,interleave_visuals=False \
 	--tasks $TASK \
 	--log_samples \
 	--output_path $OUTPUT_DIR

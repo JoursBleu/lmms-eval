@@ -13,51 +13,51 @@ from openai import OpenAI
 from loguru import logger as eval_logger
 
 # NOTICE
-LOCAL_VIDEO_PATH = ""
+LOCAL_VIDEO_PATH = "/lpai/volumes/lpai-yharnam-lx-my/lt/data/MME-VideoOCR_Dataset/Video"
 
-MODEL_VERSION = "gpt-4o-2024-08-06"
-API_KEY = ""
-BASE_URL = ""
-client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
+# MODEL_VERSION = "gpt-4o-2024-08-06"
+# API_KEY = ""
+# BASE_URL = ""
+# client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 
 
-def get_chat_response(
-    prompt: str,
-    sys_prompt: str = "You are a helpful assistant.",
-    max_tokens: int = 1024,
-    temperature: float = 0.0,
-    retries: int = 10,
-):
-    global MODEL_VERSION
-    global client
+# def get_chat_response(
+    # prompt: str,
+    # sys_prompt: str = "You are a helpful assistant.",
+    # max_tokens: int = 1024,
+    # temperature: float = 0.0,
+    # retries: int = 10,
+# ):
+    # global MODEL_VERSION
+    # global client
 
-    messages = [
-        {
-            "role": "system",
-            "content": sys_prompt,
-        },
-        {"role": "user", "content": prompt},
-    ]
+    # messages = [
+        # {
+            # "role": "system",
+            # "content": sys_prompt,
+        # },
+        # {"role": "user", "content": prompt},
+    # ]
 
-    payload = {
-        "model": MODEL_VERSION,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
+    # payload = {
+        # "model": MODEL_VERSION,
+        # "messages": messages,
+        # "max_tokens": max_tokens,
+        # "temperature": temperature,
+    # }
 
-    for attempt in range(retries):
-        try:
-            response = client.chat.completions.create(**payload)
-            content = response.choices[0].message.content.strip()
-            return content
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed: {e}")
-            if attempt == retries - 1:
-                return ""
-        except Exception as e:
-            print(f"Error: {e}")
-            return ""
+    # for attempt in range(retries):
+        # try:
+            # response = client.chat.completions.create(**payload)
+            # content = response.choices[0].message.content.strip()
+            # return content
+        # except requests.exceptions.RequestException as e:
+            # print(f"Request failed: {e}")
+            # if attempt == retries - 1:
+                # return ""
+        # except Exception as e:
+            # print(f"Error: {e}")
+            # return ""
 
 
 def extract_characters_regex(s):
@@ -103,7 +103,7 @@ Focus solely on semantic equivalence, not grammar or style. Ignore minor differe
 
 def mme_videoocr_doc_to_visual(doc):
     video = os.path.join(LOCAL_VIDEO_PATH, doc["video_index"] + ".mp4")
-    return video
+    return [video]
 
 
 def mme_videoocr_doc_to_text(doc, lmms_eval_specific_kwargs=None):
@@ -144,6 +144,7 @@ def mme_videoocr_process_results(doc, results):
     pred = results[0]
     metric = doc["eval_method"].strip()
     ground_truth = doc["answer"].strip()
+    score = 0.0
     if metric == "containment_match":
         task = doc["task"]
         if task == "trajectory_recognition" or task == "scrambled_recognition":
@@ -176,29 +177,6 @@ def mme_videoocr_process_results(doc, results):
         if pred_ans == ground_truth:
             score = 1.0
         else:
-            score = 0.0
-    elif metric == "gpt_assisted_scoring":
-        task = doc["task"]
-        gpt_prompt = GPT_PROMPT
-        gpt_prompt = gpt_prompt.replace("SENTENCE_1", ground_truth)
-        gpt_prompt = gpt_prompt.replace("SENTENCE_2", pred)
-        score = -1
-        try_num = 0
-        while score == -1 and try_num <= 10:
-            try:
-                response = get_chat_response(prompt=gpt_prompt)
-                if "correct" in response.lower():
-                    score = 1.0
-                elif "wrong" in response.lower():
-                    score = 0.0
-                else:
-                    score = -1
-                    try_num += 1
-            except Exception as e:
-                print(f"Error: {e}")
-                print("Retrying...\n")
-        if score == -1:
-            print(f"GPT Error")
             score = 0.0
     data_dict = {
         "task_type": doc["task_type"],

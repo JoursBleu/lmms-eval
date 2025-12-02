@@ -1,8 +1,8 @@
-dataset_path: lmms-lab/TempCompass
+dataset_path: /lpai/volumes/lpai-yharnam-lx-my/lt/data/TempCompass
 dataset_kwargs:
   token: True
   video: True
-  cache_dir: tempcompass
+  cache_dir: TempCompass
 lmms_eval_specific_kwargs:
   default:
     pre_prompt: ""

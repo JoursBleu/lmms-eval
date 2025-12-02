@@ -1,4 +1,4 @@
-dataset_path: /mnt/volumes/lpai-yharnam-vol-ga/lt/data/MME-VideoOCR
+dataset_path: /lpai/volumes/lpai-yharnam-lx-my/lt/data/MME-VideoOCR_Dataset
 dataset_kwargs:
   token: True
 test_split: train

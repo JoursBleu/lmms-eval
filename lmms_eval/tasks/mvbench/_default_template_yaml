@@ -1,4 +1,4 @@
-dataset_path: /lpai/volumes/lpai-yharnam-vol-ga/lt/data/MVBench
+dataset_path: /lpai/volumes/lpai-yharnam-lx-my/lt/data/MVBench
 dataset_kwargs:
   token: True
   cache_dir: mvbench_video

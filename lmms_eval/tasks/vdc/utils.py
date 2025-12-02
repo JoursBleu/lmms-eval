@@ -12,19 +12,19 @@ import yaml
 
 import lmms_eval.tasks._task_utils.file_utils as file_utils
 
-try:
-    import sglang as sgl
-    from sglang import (
-        RuntimeEndpoint,
-        assistant,
-        function,
-        gen,
-        set_default_backend,
-        system,
-        user,
-    )
-except ImportError:
-    eval_logger.debug("SGLang is not installed. If you want to use llava_sglang, please install it using pip install 'sglang[all]' ")
+# try:
+    # import sglang as sgl
+    # from sglang import (
+        # RuntimeEndpoint,
+        # assistant,
+        # function,
+        # gen,
+        # set_default_backend,
+        # system,
+        # user,
+    # )
+# except ImportError:
+    # eval_logger.debug("SGLang is not installed. If you want to use llava_sglang, please install it using pip install 'sglang[all]' ")
 
 with open(Path(__file__).parent / "_default_template_yaml", "r") as f:
     raw_data = f.readlines()
@@ -258,52 +258,52 @@ def gpt_match(qa):
     return response_dict
 
 
-def llmms_eval(data_dict):
-    set_default_backend(RuntimeEndpoint("http://localhost:30000"))
+# def llmms_eval(data_dict):
+    # set_default_backend(RuntimeEndpoint("http://localhost:30000"))
 
-    try:
-        qa_pairs = data_dict["qa_list"]
-        caption = data_dict["pred"]
+    # try:
+        # qa_pairs = data_dict["qa_list"]
+        # caption = data_dict["pred"]
 
-        for qa_pair in qa_pairs:
-            question = qa_pair["question"]
-            pred_answer = generate_response(question, caption)
-            qa_pair.update({"pred_answer": pred_answer})
+        # for qa_pair in qa_pairs:
+            # question = qa_pair["question"]
+            # pred_answer = generate_response(question, caption)
+            # qa_pair.update({"pred_answer": pred_answer})
 
-        score_list = []
-        acc_list = []
-        for qa in qa_pairs:
-            response = gpt_match(qa)
+        # score_list = []
+        # acc_list = []
+        # for qa in qa_pairs:
+            # response = gpt_match(qa)
 
-            if "pred" in response and "score" in response:
-                score = response["score"]
-                acc = response["pred"]
-                score_list.append(score)
-                acc_list.append(acc)
+            # if "pred" in response and "score" in response:
+                # score = response["score"]
+                # acc = response["pred"]
+                # score_list.append(score)
+                # acc_list.append(acc)
 
-        total_score, total_acc = 0, 0
-        for score, acc in zip(score_list, acc_list):
-            total_score += score
-            if acc == "yes":
-                total_acc += 1
-        case_score = total_score / len(score_list)
-        case_acc = total_acc / len(acc_list)
+        # total_score, total_acc = 0, 0
+        # for score, acc in zip(score_list, acc_list):
+            # total_score += score
+            # if acc == "yes":
+                # total_acc += 1
+        # case_score = total_score / len(score_list)
+        # case_acc = total_acc / len(acc_list)
 
-    except Exception as e:
-        eval_logger.error(f"Error for Video Name: {data_dict.get('video_name', 'Unknown')}: {e}")
-        print(e)
-        model_name = ""
-        score = 0
-        acc = "no"
+    # except Exception as e:
+        # eval_logger.error(f"Error for Video Name: {data_dict.get('video_name', 'Unknown')}: {e}")
+        # print(e)
+        # model_name = ""
+        # score = 0
+        # acc = "no"
 
-    # Update the dictionary with the new entries
-    updated_dict = {
-        "video_name": data_dict["video_name"],
-        "score": case_score,
-        "acc": case_acc,
-    }
+    # # Update the dictionary with the new entries
+    # updated_dict = {
+        # "video_name": data_dict["video_name"],
+        # "score": case_score,
+        # "acc": case_acc,
+    # }
 
-    return updated_dict
+    # return updated_dict
 
 
 # Process result for evaluation in generic task

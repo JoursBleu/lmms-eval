@@ -1,7 +1,12 @@
 import logging
 from typing import List, Tuple
 
+import decord
 import numpy as np
+import io
+import os
+from pathlib import Path
+import time
 import torch
 import torchvision.transforms as T
 from accelerate import Accelerator, DistributedType
@@ -300,6 +305,25 @@ class InternVL2(lmms):
             for k in pop_keys:
                 gen_kwargs.pop(k)
 
+            # Generate and cache response
+            cache_path = None
+            if "CACHE_DIR" in os.environ:
+                assert(self.batch_size == 1)
+                path = Path(os.environ["CACHE_DIR"])
+                path.mkdir(parents=True, exist_ok=True)
+                cache_path = os.path.join(os.environ["CACHE_DIR"], f"{task}_{split}_{doc_id}.txt")
+
+            print("cache_path", cache_path, flush=True)
+            if cache_path is not None and os.path.exists(cache_path):
+                fd = open(cache_path, 'r')
+                response = fd.read()
+                fd.close()
+                res.append(response)
+                pbar.update(1)
+                print("Cached Prompt:", contexts[0], flush=True)
+                print("Cached Response:", response, flush=True)
+                continue
+
             visuals = [doc_to_visual(self.task_dict[task][split][doc_id])]
             visuals = self.flatten(visuals)
             if self.modality == "image":
@@ -321,9 +345,19 @@ class InternVL2(lmms):
                 pixel_values = pixel_values.to(torch.bfloat16).cuda()
                 video_prefix = "".join([f"Frame{i+1}: <image>\n" for i in range(len(num_patches_list))])
                 question = video_prefix + contexts
+                torch.cuda.synchronize()
+                start = time.time()
                 response, history = self.model.chat(self.tokenizer, pixel_values, question, gen_kwargs, num_patches_list=num_patches_list, history=None, return_history=True)
+                torch.cuda.synchronize()
+                end = time.time()
+                infer_time = (end - start) * 1000
             res.append(response)
             pbar.update(1)
+            if cache_path is not None:
+                fd = open(cache_path, 'w')
+                fd.write(f'time: {infer_time}\n')
+                fd.write(response)
+                fd.close()
         pbar.close()
         return res
 
